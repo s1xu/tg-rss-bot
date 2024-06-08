@@ -156,8 +156,10 @@ def set_rss_task(user_id: int, url: str, channel_id: str, interval: int, context
     async def task_callback(context):
         await fetch_rss_updates_for_subscription(user_id, url, channel_id, context)
 
+    # fixed an issue where push stops after a period of time
+    # https://github.com/python-telegram-bot/python-telegram-bot/issues/3424#issuecomment-1353290602
     context.job_queue.run_repeating(
-        task_callback, interval=interval * 60, first=0, name=f"{user_id}-{channel_id}")
+        task_callback, interval=interval * 60, name=f"{user_id}-{channel_id}")
 
 
 def unset_rss_task(name: str, context: ContextTypes.DEFAULT_TYPE) -> None:
