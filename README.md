@@ -4,7 +4,7 @@
 
 ## 功能
 
-- /`start`：启动机器人。
+- `/start`：启动机器人。
 - `/list`：列出当前所有订阅的RSS源。
 - `/sub`：@channelid `<url>` [mins] 订阅新的RSS源。
 - `/unsub`：@channelid `<url>` 取消订阅。
