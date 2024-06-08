@@ -1,7 +1,7 @@
-import logging
 import yaml
-from telegram.ext import ApplicationBuilder, CommandHandler
-from bot import list_subscriptions, sub, unsub, fetch_rss_updates_periodically
+import logging
+from telegram.ext import ApplicationBuilder, CommandHandler, filters, MessageHandler
+from bot import *
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -10,7 +10,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def load_config():
+def load_config() -> dict:
     """Load the configuration from the config.yml file."""
     try:
         with open('config.yml', 'r') as file:
@@ -23,42 +23,48 @@ def load_config():
         raise
 
 
-def create_bot_application(token):
+def create_bot_application(config: dict):
     """Create and return the Telegram bot application."""
     try:
-        app = ApplicationBuilder().token(token).build()
+        BOT_TOKEN = config.get('bot_token')
+        if not BOT_TOKEN:
+            raise ValueError("Bot token is missing in the configuration.")
+
+        app_builder = ApplicationBuilder().token(BOT_TOKEN)
+
+        BASE_URL = config.get('endpoint')
+        if BASE_URL:
+            app_builder.base_url(BASE_URL)
+
+        app = app_builder.build()
         return app
-    except Exception as e:
-        logger.error("Error creating the Telegram bot application: %s", e)
+    except (KeyError, TypeError, ValueError) as e:
+        logger.error(f"Error creating the Telegram bot application: {e}")
         raise
 
 
 def add_command_handlers(app):
     """Add command handlers to the bot application."""
-    app.add_handler(CommandHandler("list", list_subscriptions))
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("list", list))
     app.add_handler(CommandHandler("sub", sub))
     app.add_handler(CommandHandler("unsub", unsub))
-
-
-def schedule_jobs(app, chat_id):
-    """Schedule periodic jobs for the bot."""
-    job_queue = app.job_queue
-    job_queue.run_repeating(fetch_rss_updates_periodically,
-                            interval=60, first=0, chat_id=chat_id)
+    app.add_handler(MessageHandler(filters.COMMAND, unknown))
+    app.add_error_handler(error)
 
 
 def main():
     try:
         config = load_config()
-        BOT_TOKEN = config['bot_token']
-        CHAT_ID = config['chat_id']
-
-        app = create_bot_application(BOT_TOKEN)
+        app = create_bot_application(config)
         add_command_handlers(app)
-        schedule_jobs(app, CHAT_ID)
 
+        # fixed the restart loading task issue
+        # https://docs.python-telegram-bot.org/en/v21.2/telegram.ext.jobqueue.html#telegram.ext.JobQueue.run_once
+        app.job_queue.run_once(reload_rss_tasks, 1)
+
+        app.run_polling(poll_interval=3)
         logger.info("Bot is starting...")
-        app.run_polling()
     except Exception as e:
         logger.error("Failed to start the bot: %s", e)
 
