@@ -52,6 +52,15 @@ class Database:
         finally:
             c.close()
 
+    def update_interval(self, user_id, url, channel_id, interval):
+        c = self.conn.cursor()
+        try:
+            c.execute("UPDATE subscriptions SET interval = ? WHERE user_id = ? AND url = ? AND channel_id = ?",
+                      (interval, user_id, url, channel_id))
+            self.conn.commit()
+        finally:
+            c.close()
+
     def get_subscriptions(self, user_id):
         c = self.conn.cursor()
         try:

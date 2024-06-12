@@ -13,8 +13,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_name = update.message.from_user.name
     await update.message.reply_text(f"{user_name} 欢迎使用RSS订阅机器人🎉\n\n"
                                     " /list 查看已订阅的RSS链接\n"
-                                    " /sub @channelID <url> [mins] 订阅\n"
-                                    " /unsub @channelID <url> 取消订阅"
+                                    " /sub @channelID [url] <mins> 订阅\n"
+                                    " /unsub @channelID [url] 取消订阅\n"
+                                    " /set @channelID [url] <mins> 设置刷新间隔\n"
                                     )
 
 
@@ -23,7 +24,7 @@ async def list(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.info(f'subscriptions: {subscriptions}')
     if subscriptions:
         subscription_texts = [
-            f"频道: {channel_id}, RSS链接: {url}, 更新间隔: {interval}" for url, channel_id, interval in subscriptions]
+            f"频道: {channel_id}, RSS: {url}, 间隔: {interval}" for url, channel_id, interval in subscriptions]
         # 将列表中的字符串连接起来，每个元素用换行符分隔
         message_text = "\n".join(subscription_texts)
         await update.message.reply_text(message_text)
@@ -68,7 +69,7 @@ async def sub(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         # 如果订阅成功，设置RSS刷新任务
         set_rss_task(user_id, rss_link, channel_id, interval, context)
         # 通知用户订阅成功
-        await update.message.reply_text(f"成功订阅: {rss_link}, 刷新间隔: {interval} 分钟")
+        await update.message.reply_text(f"成功订阅: {rss_link}, 间隔: {interval} 分钟")
     else:
         # 如果订阅已存在，告知用户
         await update.message.reply_text("订阅失败：您已经订阅了这个RSS。")
@@ -83,8 +84,36 @@ async def unsub(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     rss_link = context.args[1]
     user_id = get_user_id(update, context)
     db.unsubscribe(user_id, rss_link, channel_id)
-    unset_rss_task(str(user_id), context)
+    task_name = f"{user_id}-{channel_id}" 
+    unset_rss_task(task_name, context)
     await update.message.reply_text(f"取消订阅: {rss_link}")
+
+
+async def set(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if len(context.args) != 3 or not context.args[0].startswith('@'):
+        await update.message.reply_text("使用方法: /set @频道号 <rss_link> <间隔(mins)>")
+        return
+
+    channel_id = context.args[0]
+    rss_link = context.args[1]
+
+    try:
+        interval = int(context.args[2]) if len(context.args) > 2 and context.args[2].strip() else 10
+    except ValueError:
+        interval = 10
+
+    if not await is_bot_in_channel(update, context, channel_id):
+        await update.message.reply_text("请先将我添加到频道中再执行此操作。")
+        return
+
+    user_id = get_user_id(update, context)
+    db.update_interval(user_id, rss_link, channel_id, interval)
+    # 取消任务重新设置
+    task_name = f"{user_id}-{channel_id}"
+    unset_rss_task(task_name, context)
+    set_rss_task(user_id, rss_link, channel_id, interval, context)
+    # 通知用户订阅成功
+    await update.message.reply_text(f"成功设置: {rss_link}, 间隔: {interval} 分钟")
 
 
 async def fetch_rss_updates_for_subscription(user_id: int, url: str, channel_id: str, context: ContextTypes.DEFAULT_TYPE):
@@ -139,7 +168,7 @@ async def reload_rss_tasks(context: ContextTypes.DEFAULT_TYPE):
         logger.info(
             f"Reloading task for {user_id}, {rss_link}, {channel_id}, {interval} success.")
         if channel_id is None:
-            print(
+            logging.error(
                 f"Failed to get channel ID for {channel_id}, skipping task setup.")
             continue
 
@@ -155,14 +184,16 @@ async def reload_rss_tasks(context: ContextTypes.DEFAULT_TYPE):
 def set_rss_task(user_id: int, url: str, channel_id: str, interval: int, context: ContextTypes.DEFAULT_TYPE):
     async def task_callback(context):
         await fetch_rss_updates_for_subscription(user_id, url, channel_id, context)
-
+    
     # fixed an issue where push stops after a period of time
     # https://github.com/python-telegram-bot/python-telegram-bot/issues/3424#issuecomment-1353290602
-    context.job_queue.run_repeating(
+    job = context.job_queue.run_repeating(
         task_callback, interval=interval * 60, name=f"{user_id}-{channel_id}")
+    logger.info("Added job: %s", job.name)
 
 
 def unset_rss_task(name: str, context: ContextTypes.DEFAULT_TYPE) -> None:
+    logging.info(f"Removing job {name}")
     current_job = context.job_queue.get_jobs_by_name(name)
     if not current_job:
         False
@@ -181,7 +212,7 @@ async def get_channel_id(bot, channel_username):
         chat = await bot.get_chat(channel_username)
         return chat.id
     except Exception as e:
-        print(f"Failed to get chat ID for {channel_username}: {e}")
+        logger.warn(f"Failed to get chat ID for {channel_username}: {e}")
         return None
 
 
@@ -190,4 +221,4 @@ async def unknown(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def error(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    print(f'Update {update} caused error {context.error}')
+    logging.error(f'Update {update} caused error {context.error}')

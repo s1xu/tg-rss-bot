@@ -49,6 +49,7 @@ def add_command_handlers(app):
     app.add_handler(CommandHandler("list", list))
     app.add_handler(CommandHandler("sub", sub))
     app.add_handler(CommandHandler("unsub", unsub))
+    app.add_handler(CommandHandler("set", set))
     app.add_handler(MessageHandler(filters.COMMAND, unknown))
     app.add_error_handler(error)
 
