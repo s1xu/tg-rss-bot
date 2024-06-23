@@ -6,8 +6,9 @@
 
 - `/start`：启动机器人。
 - `/list`：列出当前所有订阅的RSS源。
-- `/sub`：@channelid `<url>` [mins] 订阅新的RSS源。
-- `/unsub`：@channelid `<url>` 取消订阅。
+- `/sub`：@channelid `[url]` <mins> 订阅新的RSS源。
+- `/unsub`：@channelid `[url]` 取消订阅。
+- `/set`: @channelid `[url]` <mins> 设置抓取间隔。
 - 自动抓取和推送RSS更新。
 
 ## 环境配置
@@ -23,8 +24,8 @@
 首先，克隆仓库到本地：
 
 ```bash
-git clone https://your-repository-url.git
-cd your-repository-folder
+git clone https://github.com/s1xu/tg-rss-bot.git
+cd tg-rss-bot
 ```
 
 安装所需的依赖：
